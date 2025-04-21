@@ -8,7 +8,6 @@ import (
 	"pas/internal/lib/jwt"
 	"pas/internal/lib/mail"
 	"pas/internal/models"
-	"pas/internal/storage/psql"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,16 +21,22 @@ var (
 	ErrTokenAlreadyUsed = errors.New("token has already been used")
 )
 
-type Iauth interface {
+type Istorage interface {
+	CreateRefreshToken(context.Context, *models.RefreshTokenData) error
+	GetRefreshToken(context.Context, uuid.UUID, uuid.UUID) (*models.RefreshTokenData, error)
+	GetUserByID(context.Context, uuid.UUID) (*models.User, error)
+	RevokeRefreshToken(context.Context, uuid.UUID) error
+	GetRefreshTokenByHash(context.Context, string) (*models.RefreshTokenData, error)
+	GetRefreshTokenById(context.Context, uuid.UUID) (*models.RefreshTokenData, error)
 }
 
 type Auth struct {
-	storage    psql.Istorage
+	storage    Istorage
 	mailSender mail.Sender
 	config     *config.Config
 }
 
-func New(storage psql.Istorage, mailSender mail.Sender, config *config.Config) *Auth {
+func New(storage Istorage, mailSender mail.Sender, config *config.Config) *Auth {
 	return &Auth{
 		storage:    storage,
 		mailSender: mailSender,

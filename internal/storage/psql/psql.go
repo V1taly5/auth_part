@@ -8,15 +8,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-type Istorage interface {
-	CreateRefreshToken(context.Context, *models.RefreshTokenData) error
-	GetRefreshToken(context.Context, uuid.UUID, uuid.UUID) (*models.RefreshTokenData, error)
-	GetUserByID(context.Context, uuid.UUID) (*models.User, error)
-	RevokeRefreshToken(context.Context, uuid.UUID) error
-	GetRefreshTokenByHash(context.Context, string) (*models.RefreshTokenData, error)
-	GetRefreshTokenById(context.Context, uuid.UUID) (*models.RefreshTokenData, error)
-}
-
 type Storage struct {
 	db *sqlx.DB
 }
