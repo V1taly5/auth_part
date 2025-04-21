@@ -1,6 +1,7 @@
 package jwt
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -14,21 +15,21 @@ var (
 	ErrInvalidToken = errors.New("invalid token")
 )
 
-type TokenClaims struct {
-	UserID    string `json:"user_id"`
+type RefreshTokenClaims struct {
 	IPAddress string `json:"ip_address"`
-	JwtID     string `json:"jti"` // JWT ID для связи с refresh token
+	jwt.RegisteredClaims
+}
+
+type AccessTokenClaims struct {
 	jwt.RegisteredClaims
 }
 
 func GenerateAccessToken(userID uuid.UUID, ipAdress string, secretKey string, expiration time.Duration, jwtID string) (string, error) {
 	now := time.Now()
 
-	accessClaim := TokenClaims{
-		UserID:    userID.String(),
-		IPAddress: ipAdress,
-		JwtID:     jwtID,
+	accessClaim := AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID.String(),
 			Issuer:    userID.String(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(expiration)),
@@ -45,19 +46,28 @@ func GenerateAccessToken(userID uuid.UUID, ipAdress string, secretKey string, ex
 	return signedToken, nil
 }
 
-func GenerateRefreshToken(userID uuid.UUID, ipAdress string, secretKey string, expiration time.Duration, jwtID string) (string, error) {
+func GenerateRefreshToken(
+	userID uuid.UUID,
+	ipAdress string,
+	secretKey string,
+	expiration time.Duration,
+	accessJwtID string,
+	JwtID string,
+) (
+	string,
+	error,
+) {
 	now := time.Now()
-
-	refreshClime := TokenClaims{
-		UserID:    userID.String(),
+	refreshClime := RefreshTokenClaims{
 		IPAddress: ipAdress,
-		JwtID:     jwtID,
+		// AccessJwtID: accessJwtID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID.String(),
 			Issuer:    userID.String(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(expiration)),
 			NotBefore: jwt.NewNumericDate(now),
-			ID:        jwtID,
+			ID:        JwtID,
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, refreshClime)
@@ -68,8 +78,8 @@ func GenerateRefreshToken(userID uuid.UUID, ipAdress string, secretKey string, e
 	return signedToken, nil
 }
 
-func ParseToken(tokenString, secretKey string) (*TokenClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+func ParseToken(tokenString, secretKey string) (*RefreshTokenClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &RefreshTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok || token.Method.Alg() != "HS512" {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -82,7 +92,7 @@ func ParseToken(tokenString, secretKey string) (*TokenClaims, error) {
 		return nil, ErrInvalidToken
 	}
 
-	claims, ok := token.Claims.(*TokenClaims)
+	claims, ok := token.Claims.(*RefreshTokenClaims)
 	if !ok {
 		return nil, errors.New("invalid token claims")
 	}
@@ -90,7 +100,9 @@ func ParseToken(tokenString, secretKey string) (*TokenClaims, error) {
 }
 
 func HashRefreshToken(refreshToken string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(refreshToken), bcrypt.DefaultCost)
+	// limiting the size of the input data
+	sha256Hash := sha256.Sum256([]byte(refreshToken))
+	hash, err := bcrypt.GenerateFromPassword(sha256Hash[:], bcrypt.DefaultCost)
 	if err != nil {
 		return "", err
 	}
@@ -98,7 +110,8 @@ func HashRefreshToken(refreshToken string) (string, error) {
 }
 
 func VerifyRefreshToken(refreshToken, hashRefreshToken string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hashRefreshToken), []byte(refreshToken))
+	sha256Hash := sha256.Sum256([]byte(refreshToken))
+	err := bcrypt.CompareHashAndPassword([]byte(hashRefreshToken), sha256Hash[:])
 	return err == nil
 }
 
