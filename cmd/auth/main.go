@@ -16,15 +16,25 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	cfg, err := config.Load()
+
+	err := godotenv.Load()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Fatalf("Failed to load env: %v", err)
+	}
+
+	var cfg config.Config
+
+	err = cleanenv.ReadEnv(&cfg)
+	if err != nil {
+		log.Fatalf("Failed to read env: %v", err)
 	}
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -44,7 +54,7 @@ func main() {
 
 	mailSender := mail.NewMockEmailSender()
 
-	authService := services.New(storage, mailSender, cfg)
+	authService := services.New(storage, mailSender, &cfg)
 
 	router := httpserver.SetupRoutes(log, authService)
 
