@@ -20,19 +20,18 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
-	"github.com/joho/godotenv"
 )
 
 func main() {
 
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Failed to load env: %v", err)
-	}
+	// err := godotenv.Load()
+	// if err != nil {
+	// 	log.Fatalf("Failed to load env: %v", err)
+	// }
 
 	var cfg config.Config
 
-	err = cleanenv.ReadEnv(&cfg)
+	err := cleanenv.ReadEnv(&cfg)
 	if err != nil {
 		log.Fatalf("Failed to read env: %v", err)
 	}
