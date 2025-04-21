@@ -57,7 +57,7 @@ func NewGetTokensHandler(log *slog.Logger, authService AuthService) http.Handler
 
 type Response struct {
 	resp.Response
-	tokenPairs models.TokenPairs
+	TokenPairs models.TokenPairs `json:"token_pairs"`
 }
 
 func NewRefreshTokensHandler(log *slog.Logger, authService AuthService) http.HandlerFunc {
@@ -93,7 +93,7 @@ func NewRefreshTokensHandler(log *slog.Logger, authService AuthService) http.Han
 				errors.Is(err, services.ErrTokenNotFound),
 				errors.Is(err, services.ErrExpiredToken):
 				statusCode = http.StatusUnauthorized
-				errMsg = "	"
+				errMsg = ""
 			case errors.Is(err, services.ErrTokenAlreadyUsed):
 				statusCode = http.StatusForbidden
 				errMsg = "token already used"
