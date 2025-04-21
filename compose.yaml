@@ -33,6 +33,33 @@ services:
       postgres:
         condition: service_healthy
 
+  autph-app:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: auth
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      - HTTPSERVER_ADDRESS=0.0.0.0:8080
+      - HTTPSERVER_TIMEOUT=4s
+      - HTTPSERVER_IDLE_TIMEOUT=60s
+      - POSTGRES_URL=postgres://postgres:postgres@postgres:5432/mydb?sslmode=disable
+      - JWT_ACCESS_SECRET=my-access-secret-key
+      - JWT_ACCESS_EXPIRATION=15m
+      - JWT_REFRESH_EXPIRATION=24h
+      - EMAIL_FROM=auth@mail.com
+      - EMAIL_SERVER=smtp.example.com
+      - EMAIL_PORT=444
+      - EMAIL_USERNAME=my-email-username
+      - EMAIL_PASSWORD=my-email-password
+    networks:
+      - postgres-network
+
 volumes:
   postgres_data:
 
