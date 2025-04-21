@@ -13,6 +13,8 @@ type Istorage interface {
 	GetRefreshToken(context.Context, uuid.UUID, uuid.UUID) (*models.RefreshTokenData, error)
 	GetUserByID(context.Context, uuid.UUID) (*models.User, error)
 	RevokeRefreshToken(context.Context, uuid.UUID) error
+	GetRefreshTokenByHash(context.Context, string) (*models.RefreshTokenData, error)
+	GetRefreshTokenById(context.Context, uuid.UUID) (*models.RefreshTokenData, error)
 }
 
 type Storage struct {
@@ -25,7 +27,7 @@ func New(db *sqlx.DB) *Storage {
 
 func (s *Storage) CreateRefreshToken(ctx context.Context, tokenData *models.RefreshTokenData) error {
 	query := `
-		INSERT INTO refresh_token (id, user_id, token_hash, ip_address, expires_at, created_at, revoked, jwt_id)
+		INSERT INTO refresh_tokens (id, user_id, token_hash, ip_address, expires_at, created_at, revoked, jwt_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 	_, err := s.db.ExecContext(
@@ -49,14 +51,43 @@ func (s *Storage) GetRefreshToken(ctx context.Context, userID uuid.UUID, jwtID u
 
 	query := `
 		SELECT id, user_id, token_hash, ip_address, expires_at, created_at, revoked, jwt_id
-		FROM refresh_token
+		FROM refresh_tokens
 		WHERE user_id = $1 AND jwt_id = $2 AND revoked = false 
 	`
-	err := s.db.GetContext(ctx, &refreshTokenData, query, userID, jwtID)
+	err := s.db.GetContext(ctx, &refreshTokenData, query, userID.String(), jwtID.String())
 	if err != nil {
 		return nil, err
 	}
 
+	return &refreshTokenData, nil
+}
+
+func (s *Storage) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (*models.RefreshTokenData, error) {
+	var refreshTokenData models.RefreshTokenData
+
+	query := `
+		SELECT id, user_id, token_hash, ip_address, expires_at, created_at, revoked, jwt_id
+		FROM refresh_tokens
+		WHERE token_hash = $1;
+	`
+	err := s.db.GetContext(ctx, &refreshTokenData, query, tokenHash)
+	if err != nil {
+		return nil, err
+	}
+	return &refreshTokenData, nil
+}
+func (s *Storage) GetRefreshTokenById(ctx context.Context, jwtID uuid.UUID) (*models.RefreshTokenData, error) {
+	var refreshTokenData models.RefreshTokenData
+
+	query := `
+		SELECT id, user_id, token_hash, ip_address, expires_at, created_at, revoked, jwt_id
+		FROM refresh_tokens
+		WHERE id = $1;
+	`
+	err := s.db.GetContext(ctx, &refreshTokenData, query, jwtID)
+	if err != nil {
+		return nil, err
+	}
 	return &refreshTokenData, nil
 }
 
@@ -73,7 +104,7 @@ func (s *Storage) GetUserByID(ctx context.Context, userID uuid.UUID) (*models.Us
 }
 
 func (s *Storage) RevokeRefreshToken(ctx context.Context, jwtID uuid.UUID) error {
-	query := `UPDATE refresh_token SET revoked  = true WHERE jwtID = $1`
+	query := `UPDATE refresh_tokens SET revoked  = true WHERE id = $1`
 	_, err := s.db.ExecContext(ctx, query, jwtID)
 	return err
 }
