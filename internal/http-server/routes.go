@@ -16,7 +16,7 @@ func SetupRoutes(log *slog.Logger, servvice handlers.AuthService) *chi.Mux {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
-			r.Get("tokens/{user_id}", handlers.NewGetTokensHandler(log, servvice))
+			r.Get("/tokens/{user_id}", handlers.NewGetTokensHandler(log, servvice))
 			r.Post("/refresh", handlers.NewRefreshTokensHandler(log, servvice))
 		})
 	})
