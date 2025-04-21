@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	resp "pas/internal/lib/api/response"
 	"pas/internal/lib/logger/sl"
@@ -36,14 +37,32 @@ func NewGetTokensHandler(log *slog.Logger, authService AuthService) http.Handler
 		userID, err := uuid.Parse(userIDStr)
 		if err != nil {
 			log.Error("invalid user_id", slog.String("user_id", userIDStr), sl.Err(err))
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("invalid user ID format"))
 			return
 		}
 
-		ipAddress := r.RemoteAddr
+		ipAddress := extractClientIP(r)
 		tokenPair, err := authService.GenerateTokens(r.Context(), userID, ipAddress)
 		if err != nil {
-			log.Error("failed to generate tokens", sl.Err(err))
+			var statusCode int
+			var errMsg string
+			switch {
+			case errors.Is(err, services.ErrUserNotFound):
+				statusCode = http.StatusNotFound
+				errMsg = "user not found"
+			default:
+				statusCode = http.StatusInternalServerError
+				errMsg = "internal server error"
+			}
+
+			log.Error("failed to generate tokens",
+				slog.String("user_id", userID.String()),
+				slog.Int("status_code", statusCode),
+				slog.String("error_message", errMsg),
+				sl.Err(err),
+			)
+			render.Status(r, statusCode)
 			render.JSON(w, r, resp.Error("internal server error"))
 			return
 		}
@@ -70,45 +89,27 @@ func NewRefreshTokensHandler(log *slog.Logger, authService AuthService) http.Han
 		)
 
 		var req models.RefreshRequest
-
 		if err := render.DecodeJSON(r.Body, &req); err != nil {
 			log.Error("failed to decode request body", sl.Err(err))
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("invalid request body"))
 			return
 		}
 
 		if err := ValidateRefreshToken(req.RefreshToken); err != nil {
-			log.Error("invalid validation", sl.Err(err))
+			log.Error("invalid refresh token", sl.Err(err))
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, resp.Error("invalid refresh token"))
 			return
 		}
 
-		ipAddress := r.RemoteAddr
+		ipAddress := extractClientIP(r)
 		tokenPair, err := authService.RefreshTokens(r.Context(), req.RefreshToken, ipAddress)
 		if err != nil {
-			var statusCode int
-			var errMsg string
-
-			switch {
-			case errors.Is(err, services.ErrInvalidToken),
-				errors.Is(err, services.ErrTokenNotFound),
-				errors.Is(err, services.ErrExpiredToken):
-				statusCode = http.StatusUnauthorized
-				errMsg = ""
-			case errors.Is(err, services.ErrTokenAlreadyUsed):
-				statusCode = http.StatusForbidden
-				errMsg = "token already used"
-			case errors.Is(err, services.ErrUserNotFound):
-				statusCode = http.StatusNotFound
-				errMsg = "user not found"
-			default:
-				statusCode = http.StatusInternalServerError
-				errMsg = "internal server error"
-			}
-			log.Error("failed to refresh tokens", slog.String("error msg", errMsg), sl.Err(err))
-			render.Status(r, statusCode)
-			render.JSON(w, r, resp.Error(errMsg))
+			handleRefreshTokenError(log, w, r, err)
 			return
 		}
+
 		log.Info("tokens refreshed successfully")
 		render.JSON(w, r, Response{
 			resp.OK(),
@@ -127,4 +128,42 @@ func ValidateRefreshToken(token string) error {
 	}
 
 	return nil
+}
+
+func extractClientIP(r *http.Request) string {
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
+}
+
+func handleRefreshTokenError(log *slog.Logger, w http.ResponseWriter, r *http.Request, err error) {
+	var statusCode int
+	var errMsg string
+
+	switch {
+	case errors.Is(err, services.ErrInvalidToken),
+		errors.Is(err, services.ErrTokenNotFound),
+		errors.Is(err, services.ErrExpiredToken):
+		statusCode = http.StatusUnauthorized
+		errMsg = "invalid or expired token"
+	case errors.Is(err, services.ErrTokenAlreadyUsed):
+		statusCode = http.StatusForbidden
+		errMsg = "token already used"
+	case errors.Is(err, services.ErrUserNotFound):
+		statusCode = http.StatusNotFound
+		errMsg = "user not found"
+	default:
+		statusCode = http.StatusInternalServerError
+		errMsg = "internal server error"
+	}
+	log.Error("failed to refresh tokens",
+		slog.Int("status_code", statusCode),
+		slog.String("error msg", errMsg),
+		sl.Err(err),
+	)
+	render.Status(r, statusCode)
+	render.JSON(w, r, resp.Error(errMsg))
+	return
 }
