@@ -13,8 +13,7 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     revoked BOOLEAN NOT NULL DEFAULT FALSE,
-    jwt_id VARCHAR(255) NOT NULL,
-    UNIQUE(user_id) 
+    jwt_id VARCHAR(255) NOT NULL, 
 );
 
 CREATE INDEX IF NOT EXISTS idx_refresh_token_user_id ON refresh_tokens(user_id);
