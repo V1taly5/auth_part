@@ -33,7 +33,7 @@ services:
       postgres:
         condition: service_healthy
 
-  autph-app:
+  auth-app:
     build:
       context: .
       dockerfile: dockerfile
