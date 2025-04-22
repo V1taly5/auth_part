@@ -23,11 +23,9 @@ var (
 
 type Istorage interface {
 	CreateRefreshToken(context.Context, *models.RefreshTokenData) error
-	GetRefreshToken(context.Context, uuid.UUID, uuid.UUID) (*models.RefreshTokenData, error)
 	GetUserByID(context.Context, uuid.UUID) (*models.User, error)
-	RevokeRefreshToken(context.Context, uuid.UUID) error
-	GetRefreshTokenByHash(context.Context, string) (*models.RefreshTokenData, error)
 	GetRefreshTokenById(context.Context, uuid.UUID) (*models.RefreshTokenData, error)
+	CreateAndRevokeRefreshToken(ctx context.Context, tokenData *models.RefreshTokenData, jwtID uuid.UUID) error
 }
 
 type Auth struct {
@@ -255,12 +253,16 @@ func (a *Auth) rotateRefreshToken(
 		JWTID:     existingToken.JWTID,
 	}
 
-	if err := a.storage.CreateRefreshToken(ctx, newToken); err != nil {
-		return fmt.Errorf("failed to save new refresh token: %w", err)
-	}
+	// if err := a.storage.CreateRefreshToken(ctx, newToken); err != nil {
+	// 	return fmt.Errorf("failed to save new refresh token: %w", err)
+	// }
 
-	if err := a.storage.RevokeRefreshToken(ctx, existingToken.ID); err != nil {
-		return fmt.Errorf("failed to revok old refresh token: %w", err)
+	// if err := a.storage.RevokeRefreshToken(ctx, existingToken.ID); err != nil {
+	// 	return fmt.Errorf("failed to revok old refresh token: %w", err)
+	// }
+
+	if err := a.storage.CreateAndRevokeRefreshToken(ctx, newToken, existingToken.ID); err != nil {
+		return fmt.Errorf("failed to create new refresh token: %w", err)
 	}
 
 	return nil
