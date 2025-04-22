@@ -2,6 +2,7 @@ package psql
 
 import (
 	"context"
+	"fmt"
 	"pas/internal/models"
 
 	"github.com/google/uuid"
@@ -98,4 +99,50 @@ func (s *Storage) RevokeRefreshToken(ctx context.Context, jwtID uuid.UUID) error
 	query := `UPDATE refresh_tokens SET revoked  = true WHERE id = $1`
 	_, err := s.db.ExecContext(ctx, query, jwtID)
 	return err
+}
+
+func (s *Storage) CreateAndRevokeRefreshToken(ctx context.Context, tokenData *models.RefreshTokenData, jwtID uuid.UUID) error {
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	insertQuery := `
+        INSERT INTO refresh_tokens (id, user_id, token_hash, ip_address, expires_at, created_at, revoked, jwt_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `
+	_, err = tx.ExecContext(ctx, insertQuery,
+		tokenData.ID,
+		tokenData.UserID,
+		tokenData.TokenHash,
+		tokenData.IPAddress,
+		tokenData.ExpiresAt,
+		tokenData.CreatedAt,
+		tokenData.Revoked,
+		tokenData.JWTID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert refresh token: %w", err)
+	}
+
+	revokeQuery := `UPDATE refresh_tokens SET revoked = true WHERE id = $1`
+	_, err = tx.ExecContext(ctx, revokeQuery, jwtID)
+	if err != nil {
+		return fmt.Errorf("failed to revoke refresh token: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
